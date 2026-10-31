@@ -1,7 +1,27 @@
-node_modules
-dist
-__pycache__
-*.db
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+
+# Environment and local data
 .env
-.venv
-.vercel
+.env.*
+!.env.example
+*.db
+
+# JavaScript
+node_modules/
+dist/
+
+# Vercel
+.vercel/
+
+# Editors and operating systems
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
