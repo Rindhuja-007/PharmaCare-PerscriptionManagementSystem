@@ -110,9 +110,10 @@ def gemini_ocr(data):
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        for attempt in range(3):
+        attempts = 2 if model_name == models[0] else 1
+        for attempt in range(attempts):
             try:
-                with urlopen(request, timeout=45) as response:
+                with urlopen(request, timeout=15) as response:
                     result = json.load(response)
                 break
             except HTTPError as exc:
@@ -121,7 +122,7 @@ def gemini_ocr(data):
                     detail = json.loads(detail).get("error", {}).get("message", detail)
                 except json.JSONDecodeError:
                     pass
-                if exc.code in (429, 500, 502, 503, 504) and attempt < 2:
+                if exc.code in (429, 500, 502, 503, 504) and attempt + 1 < attempts:
                     time.sleep(2 ** attempt)
                     continue
                 if exc.code == 503 and model_name != models[-1]:
@@ -130,7 +131,7 @@ def gemini_ocr(data):
                     raise OCRServiceError("Gemini is temporarily busy. Please try OCR again in a minute.") from exc
                 raise OCRServiceError(f"Gemini OCR request failed ({exc.code}): {detail}") from exc
             except (URLError, TimeoutError) as exc:
-                if attempt < 2:
+                if attempt + 1 < attempts:
                     time.sleep(2 ** attempt)
                     continue
                 raise OCRServiceError("Gemini OCR could not be reached. Try again.") from exc
