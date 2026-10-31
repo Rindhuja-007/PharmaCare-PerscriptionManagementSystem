@@ -20,11 +20,20 @@ Tests: `python -m pytest` (12 tests).
 5. Open the deployed site and click **Load demo data**, or create the first administrator. The API health check is available at `/api/health`.
 
 The backend already converts `postgresql://` and `postgres://` URLs for SQLAlchemy and creates the required tables on startup. Never commit the Supabase URI, database password, or JWT secret; keep them only in Vercel environment variables or an ignored local `.env` file.
-Images live in the database (max 4 MB, the browser shrinks photos first). The Vercel deployment uses the lightweight image-processing dependencies and supports manual medicine entry. RapidOCR is optional for local deployments: install `requirements-ocr.txt` (included by `requirements-dev.txt`) to enable local OCR. If OCR is unavailable, the app says so and you can add medicines by hand.
+Images live in the database (max 4 MB, the browser shrinks photos first). The Vercel deployment uses lightweight dependencies and supports manual medicine entry. RapidOCR runs in the separate Render service described below; it remains optional for local deployments through `requirements-ocr.txt`.
 OCR filters out non-medicine prescription text and suggests each medicine with its dosage, frequency, duration, and explicitly stated quantity for pharmacist review.
 
-## Browser OCR
+## Deploy RapidOCR on Render
 
-Prescription OCR runs in the user's browser with Tesseract.js. The image is not uploaded to an OCR vendor, and no OCR API key, billing account, Render service, or external OCR quota is required. The browser sends only the recognized text to the backend, where the existing catalogue matching and pharmacist verification workflow continues.
+The Vercel application can use RapidOCR through a separate Render web service. This keeps the large OCR dependencies and model files out of the Vercel function bundle.
 
-Browser OCR is free and private, but handwritten medicine names may be misread. Always review the extracted lines, match them against the catalogue, and verify each line before dispensing. A clear, straight, well-lit image produces the best result.
+1. Push this repository to GitHub.
+2. In Render, choose **New + -> Blueprint**, select the repository, and apply the included `ocr_service/render.yaml`.
+3. Wait for `pharmacare-rapidocr` to deploy. Open its `/health` URL and confirm it returns `{"ok":true}`.
+4. In the Render service's environment variables, reveal the generated `RAPID_OCR_TOKEN` and copy it.
+5. In Vercel, add these Production environment variables:
+   - `RAPID_OCR_URL`: the Render service URL, without a trailing slash.
+   - `RAPID_OCR_TOKEN`: the exact token copied from Render.
+6. Redeploy Vercel, then open a prescription and click **Read prescription automatically**.
+
+The Vercel backend sends the prescription image to the authenticated Render service. RapidOCR returns text and confidence; the existing extraction, catalogue matching, pharmacist verification, and dispensing workflow remains unchanged. Render's free service may sleep when idle, so the first OCR request can take longer.

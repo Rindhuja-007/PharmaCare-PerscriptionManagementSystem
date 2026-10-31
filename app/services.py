@@ -232,7 +232,42 @@ def gemini_ocr(data):
         raise OCRServiceError("Gemini returned no readable text for this image.")
     return text, 0
 
+def rapid_ocr_remote(data):
+    endpoint = os.getenv("RAPID_OCR_URL", "").strip().rstrip("/")
+    if not endpoint:
+        raise OCRServiceError("RapidOCR service is not configured on this server.")
+    token = os.getenv("RAPID_OCR_TOKEN", "").strip()
+    boundary = b"----PharmaCareOCRBoundary"
+    body = (
+        b"--" + boundary + b"\r\n"
+        b'Content-Disposition: form-data; name="file"; filename="prescription.png"\r\n'
+        b"Content-Type: image/png\r\n\r\n" + data +
+        b"\r\n--" + boundary + b"--\r\n"
+    )
+    request = Request(
+        endpoint + "/ocr",
+        data=body,
+        headers={
+            "Content-Type": "multipart/form-data; boundary=" + boundary.decode(),
+            **({"X-OCR-Token": token} if token else {}),
+        },
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=25) as response:
+            result = json.load(response)
+    except HTTPError as exc:
+        raise OCRServiceError(f"RapidOCR service request failed ({exc.code}).") from exc
+    except (URLError, TimeoutError) as exc:
+        raise OCRServiceError("RapidOCR service could not be reached. Try again.") from exc
+    text = result.get("extracted_text") if isinstance(result, dict) else None
+    if not isinstance(text, str) or not text.strip():
+        raise OCRServiceError("RapidOCR returned no readable text for this image.")
+    return text.strip(), float(result.get("confidence_score") or 0)
+
 def ocr(data):
+    if os.getenv("RAPID_OCR_URL"):
+        return rapid_ocr_remote(data)
     if os.getenv("DASHSCOPE_API_KEY"):
         return qwen_ocr(data)
     if os.getenv("GEMINI_API_KEY"):
