@@ -1,20 +1,28 @@
-import os, re, cv2, numpy as np
+import io, os, re
+from PIL import Image, ImageOps
 from rapidfuzz import fuzz
 from .db import Medicine, Batch, today
 _ocr = None
 def _decode(data):
+    import cv2
+    import numpy as np
     im = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
     if im is None: raise ValueError("Unreadable image")
     return im
 def preprocess(data):
-    im = _decode(data)
-    if im.shape[1] > 1800: im = cv2.resize(im, (1800, int(im.shape[0] * 1800 / im.shape[1])), interpolation=cv2.INTER_AREA)
-    g = cv2.fastNlMeansDenoising(cv2.cvtColor(im, cv2.COLOR_BGR2GRAY), None, 10, 7, 21)
-    g = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8)).apply(g)
-    return cv2.imencode(".png", cv2.threshold(g, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1])[1].tobytes()
+    im = Image.open(io.BytesIO(data)).convert("L")
+    if im.width > 1800:
+        im.thumbnail((1800, 1800), Image.Resampling.LANCZOS)
+    im = ImageOps.autocontrast(im)
+    im = im.point(lambda pixel: 255 if pixel > 160 else 0)
+    out = io.BytesIO()
+    im.save(out, format="PNG")
+    return out.getvalue()
 def ocr(data):
     global _ocr
     if _ocr is None:
+        import cv2
+        import numpy as np
         from rapidocr_onnxruntime import RapidOCR
         _ocr = RapidOCR()
     res, _ = _ocr(_decode(data)); res = res or []

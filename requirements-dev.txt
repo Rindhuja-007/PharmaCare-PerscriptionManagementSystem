@@ -1,2 +1,3 @@
 pytest
 httpx
+-r requirements-ocr.txt

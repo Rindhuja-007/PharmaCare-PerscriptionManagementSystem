@@ -20,5 +20,5 @@ Tests: `python -m pytest` (12 tests).
 5. Open the deployed site and click **Load demo data**, or create the first administrator. The API health check is available at `/api/health`.
 
 The backend already converts `postgresql://` and `postgres://` URLs for SQLAlchemy and creates the required tables on startup. Never commit the Supabase URI, database password, or JWT secret; keep them only in Vercel environment variables or an ignored local `.env` file.
-Images live in the database (max 4 MB, the browser shrinks photos first). OCR uses RapidOCR; if it is unavailable the app says so and you can add medicines by hand.
+Images live in the database (max 4 MB, the browser shrinks photos first). The Vercel deployment uses the lightweight image-processing dependencies and supports manual medicine entry. RapidOCR is optional for local deployments: install `requirements-ocr.txt` (included by `requirements-dev.txt`) to enable local OCR. If OCR is unavailable, the app says so and you can add medicines by hand.
 OCR filters out non-medicine prescription text and suggests each medicine with its dosage, frequency, duration, and explicitly stated quantity for pharmacist review.
