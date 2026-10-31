@@ -194,6 +194,7 @@ def rx_pre(pid: int, db=D, u=U):
 def rx_ocr(pid: int, db=D, u=U):
     p = rx(db, pid)
     try: txt, conf = S.ocr(p.processed_data or p.image_data)
+    except S.GoogleVisionError as e: raise HTTPException(502, str(e))
     except ImportError: raise HTTPException(503, "The OCR engine is not available on this server. Add the medicines manually instead.")
     except ValueError as e: raise HTTPException(422, str(e))
     p.extracted_text, p.confidence_score = txt, round(conf, 2)

@@ -1,8 +1,14 @@
-import io, os, re
+import base64, io, json, os, re
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 from PIL import Image, ImageOps
 from rapidfuzz import fuzz
 from .db import Medicine, Batch, today
 _ocr = None
+
+class GoogleVisionError(Exception):
+    pass
+
 def _decode(data):
     import cv2
     import numpy as np
@@ -18,7 +24,51 @@ def preprocess(data):
     out = io.BytesIO()
     im.save(out, format="PNG")
     return out.getvalue()
+
+def google_ocr(data):
+    key = os.getenv("GOOGLE_VISION_API_KEY")
+    if not key:
+        raise GoogleVisionError("Google Vision is not configured on this server.")
+    body = json.dumps({
+        "requests": [{
+            "image": {"content": base64.b64encode(data).decode("ascii")},
+            "features": [{"type": "DOCUMENT_TEXT_DETECTION"}],
+            "imageContext": {"languageHints": ["en-t-i0-handwrit"]},
+        }]
+    }).encode("utf-8")
+    request = Request(
+        "https://vision.googleapis.com/v1/images:annotate?key=" + key,
+        data=body,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=30) as response:
+            result = json.load(response)
+    except HTTPError as exc:
+        detail = exc.read().decode("utf-8", "replace")
+        raise GoogleVisionError(f"Google Vision request failed ({exc.code}).") from exc
+    except (URLError, TimeoutError) as exc:
+        raise GoogleVisionError("Google Vision could not be reached. Try again.") from exc
+    error = (result.get("responses") or [{}])[0].get("error")
+    if error:
+        raise GoogleVisionError(error.get("message", "Google Vision rejected the image."))
+    annotation = (result.get("responses") or [{}])[0].get("fullTextAnnotation") or {}
+    text = annotation.get("text", "").strip()
+    confidences = [
+        float(symbol["confidence"])
+        for page in annotation.get("pages", [])
+        for block in page.get("blocks", [])
+        for paragraph in block.get("paragraphs", [])
+        for word in paragraph.get("words", [])
+        for symbol in word.get("symbols", [])
+        if symbol.get("confidence") is not None
+    ]
+    return text, (sum(confidences) / len(confidences) * 100 if confidences else 0)
+
 def ocr(data):
+    if os.getenv("GOOGLE_VISION_API_KEY"):
+        return google_ocr(data)
     global _ocr
     if _ocr is None:
         import cv2

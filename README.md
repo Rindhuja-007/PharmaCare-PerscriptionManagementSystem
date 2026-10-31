@@ -22,3 +22,15 @@ Tests: `python -m pytest` (12 tests).
 The backend already converts `postgresql://` and `postgres://` URLs for SQLAlchemy and creates the required tables on startup. Never commit the Supabase URI, database password, or JWT secret; keep them only in Vercel environment variables or an ignored local `.env` file.
 Images live in the database (max 4 MB, the browser shrinks photos first). The Vercel deployment uses the lightweight image-processing dependencies and supports manual medicine entry. RapidOCR is optional for local deployments: install `requirements-ocr.txt` (included by `requirements-dev.txt`) to enable local OCR. If OCR is unavailable, the app says so and you can add medicines by hand.
 OCR filters out non-medicine prescription text and suggests each medicine with its dosage, frequency, duration, and explicitly stated quantity for pharmacist review.
+
+## Enable Google Cloud Vision OCR
+
+Google Vision is called only by the backend, so the API key is never exposed in the browser.
+
+1. Open [Google Cloud Console](https://console.cloud.google.com/), create or select a project, and enable **Cloud Vision API**.
+2. Open **APIs & Services -> Credentials -> Create credentials -> API key**.
+3. Restrict the key to **Cloud Vision API** and, where possible, restrict requests to your deployment's server-side usage.
+4. In Vercel, open **Project -> Settings -> Environment Variables**, add `GOOGLE_VISION_API_KEY`, and enable it for Production (and Preview if needed).
+5. Redeploy, open a prescription, click **Clean image**, then **Run OCR**, and finally **Find medicines**.
+
+The application uses Vision's `DOCUMENT_TEXT_DETECTION` feature with an English handwriting hint. Vision's response is treated only as a suggestion: catalogue matching, pharmacist verification, and dispensing remain separate steps. Do not put the key in `VITE_*` variables or frontend source code. Google Cloud billing and applicable free-tier limits are controlled by Google; check the current [Vision pricing](https://cloud.google.com/vision/pricing) before production use.
