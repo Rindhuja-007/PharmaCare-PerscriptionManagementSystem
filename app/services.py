@@ -6,8 +6,10 @@ from rapidfuzz import fuzz
 from .db import Medicine, Batch, today
 _ocr = None
 
-class GoogleVisionError(Exception):
+class OCRServiceError(Exception):
     pass
+
+GoogleVisionError = OCRServiceError
 
 def _decode(data):
     import cv2
@@ -66,7 +68,57 @@ def google_ocr(data):
     ]
     return text, (sum(confidences) / len(confidences) * 100 if confidences else 0)
 
+def gemini_ocr(data):
+    key = os.getenv("GEMINI_API_KEY")
+    if not key:
+        raise OCRServiceError("Gemini OCR is not configured on this server.")
+    prompt = (
+        "Transcribe this prescription image exactly as written. Return only the "
+        "prescription text, one line per visible line. Preserve medicine names, "
+        "dosages, frequencies, durations, and quantities. Do not invent or correct "
+        "text, and do not include explanations or markdown."
+    )
+    body = json.dumps({
+        "contents": [{
+            "parts": [
+                {"text": prompt},
+                {"inline_data": {
+                    "mime_type": "image/png",
+                    "data": base64.b64encode(data).decode("ascii"),
+                }},
+            ]
+        }],
+        "generationConfig": {
+            "temperature": 0,
+            "responseMimeType": "text/plain",
+        },
+    }).encode("utf-8")
+    model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    request = Request(
+        f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}",
+        data=body,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=45) as response:
+            result = json.load(response)
+    except HTTPError as exc:
+        raise OCRServiceError(f"Gemini OCR request failed ({exc.code}).") from exc
+    except (URLError, TimeoutError) as exc:
+        raise OCRServiceError("Gemini OCR could not be reached. Try again.") from exc
+    if result.get("error"):
+        raise OCRServiceError(result["error"].get("message", "Gemini rejected the image."))
+    candidates = result.get("candidates") or []
+    parts = (candidates[0].get("content") or {}).get("parts", []) if candidates else []
+    text = "\n".join(part.get("text", "") for part in parts).strip()
+    if not text:
+        raise OCRServiceError("Gemini returned no readable text for this image.")
+    return text, 0
+
 def ocr(data):
+    if os.getenv("GEMINI_API_KEY"):
+        return gemini_ocr(data)
     if os.getenv("GOOGLE_VISION_API_KEY"):
         return google_ocr(data)
     global _ocr

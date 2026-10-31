@@ -23,14 +23,13 @@ The backend already converts `postgresql://` and `postgres://` URLs for SQLAlche
 Images live in the database (max 4 MB, the browser shrinks photos first). The Vercel deployment uses the lightweight image-processing dependencies and supports manual medicine entry. RapidOCR is optional for local deployments: install `requirements-ocr.txt` (included by `requirements-dev.txt`) to enable local OCR. If OCR is unavailable, the app says so and you can add medicines by hand.
 OCR filters out non-medicine prescription text and suggests each medicine with its dosage, frequency, duration, and explicitly stated quantity for pharmacist review.
 
-## Enable Google Cloud Vision OCR
+## Enable Gemini OCR through Google AI Studio
 
-Google Vision is called only by the backend, so the API key is never exposed in the browser.
+Gemini is called only by the backend, so the API key is never exposed in the browser.
 
-1. Open [Google Cloud Console](https://console.cloud.google.com/), create or select a project, and enable **Cloud Vision API**.
-2. Open **APIs & Services -> Credentials -> Create credentials -> API key**.
-3. Restrict the key to **Cloud Vision API** and, where possible, restrict requests to your deployment's server-side usage.
-4. In Vercel, open **Project -> Settings -> Environment Variables**, add `GOOGLE_VISION_API_KEY`, and enable it for Production (and Preview if needed).
-5. Redeploy, open a prescription, click **Clean image**, then **Run OCR**, and finally **Find medicines**.
+1. Open [Google AI Studio](https://aistudio.google.com/), sign in, and select **Get API key**.
+2. Create or select a Google AI Studio project and copy the API key.
+3. In Vercel, open **Project -> Settings -> Environment Variables**, add `GEMINI_API_KEY`, and enable it for Production (and Preview if needed).
+4. Redeploy, open a prescription, click **Clean image**, then **Run OCR**, and finally **Find medicines**.
 
-The application uses Vision's `DOCUMENT_TEXT_DETECTION` feature with an English handwriting hint. Vision's response is treated only as a suggestion: catalogue matching, pharmacist verification, and dispensing remain separate steps. Do not put the key in `VITE_*` variables or frontend source code. Google Cloud billing and applicable free-tier limits are controlled by Google; check the current [Vision pricing](https://cloud.google.com/vision/pricing) before production use.
+The application uses Gemini Flash to transcribe handwritten text. Its response is treated only as a suggestion: catalogue matching, pharmacist verification, and dispensing remain separate steps. Do not put the key in `VITE_*` variables or frontend source code. AI Studio free-tier quotas and data-use terms are controlled by Google; check the current [Gemini API pricing](https://ai.google.dev/gemini-api/docs/pricing) before production use. Remove the old `GOOGLE_VISION_API_KEY` variable from Vercel after switching.
