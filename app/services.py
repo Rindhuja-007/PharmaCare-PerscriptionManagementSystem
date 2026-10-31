@@ -113,7 +113,7 @@ def gemini_ocr(data):
         attempts = 2 if model_name == models[0] else 1
         for attempt in range(attempts):
             try:
-                with urlopen(request, timeout=15) as response:
+                with urlopen(request, timeout=10) as response:
                     result = json.load(response)
                 break
             except HTTPError as exc:
@@ -134,9 +134,13 @@ def gemini_ocr(data):
                 if attempt + 1 < attempts:
                     time.sleep(2 ** attempt)
                     continue
+                if model_name != models[-1]:
+                    break
                 raise OCRServiceError("Gemini OCR could not be reached. Try again.") from exc
         if result is not None:
             break
+    if result is None:
+        raise OCRServiceError("Gemini OCR timed out. Please try again.")
     if not isinstance(result, dict):
         raise OCRServiceError("Gemini returned an invalid response. Please try OCR again.")
     if result.get("error"):
