@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+SQLAlchemy==2.0.36
+psycopg2-binary
+argon2-cffi
+python-jose[cryptography]
+python-multipart
+opencv-python-headless
+rapidocr-onnxruntime
+rapidfuzz
