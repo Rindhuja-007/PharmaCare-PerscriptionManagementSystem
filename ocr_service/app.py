@@ -7,6 +7,7 @@ os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
 import cv2
 import numpy as np
 from fastapi import FastAPI, File, Header, HTTPException, UploadFile
+from starlette.concurrency import run_in_threadpool
 
 app = FastAPI(title="PharmaCare RapidOCR service")
 cv2.setNumThreads(1)
@@ -36,6 +37,10 @@ def get_engine():
     return engine
 
 
+def run_ocr(image):
+    return get_engine()(image)
+
+
 @app.post("/ocr")
 async def ocr(file: UploadFile = File(...), x_ocr_token: str = Header(default="")):
     if not TOKEN or x_ocr_token != TOKEN:
@@ -56,7 +61,7 @@ async def ocr(file: UploadFile = File(...), x_ocr_token: str = Header(default=""
             interpolation=cv2.INTER_AREA,
         )
     try:
-        result, _ = get_engine()(image)
+        result, _ = await run_in_threadpool(run_ocr, image)
     except Exception as exc:
         raise HTTPException(502, "RapidOCR could not process this image") from exc
     result = result or []
