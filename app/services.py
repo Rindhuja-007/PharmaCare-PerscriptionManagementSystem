@@ -136,11 +136,18 @@ def gemini_ocr(data):
                 raise OCRServiceError("Gemini OCR could not be reached. Try again.") from exc
         if result is not None:
             break
+    if not isinstance(result, dict):
+        raise OCRServiceError("Gemini returned an invalid response. Please try OCR again.")
     if result.get("error"):
         raise OCRServiceError(result["error"].get("message", "Gemini rejected the image."))
     candidates = result.get("candidates") or []
-    parts = (candidates[0].get("content") or {}).get("parts", []) if candidates else []
-    text = "\n".join(part.get("text", "") for part in parts).strip()
+    if not candidates or not isinstance(candidates[0], dict):
+        reason = (result.get("promptFeedback") or {}).get("blockReason")
+        message = f"Gemini blocked this image ({reason})." if reason else "Gemini returned no readable result."
+        raise OCRServiceError(message)
+    content = candidates[0].get("content") or {}
+    parts = content.get("parts", []) if isinstance(content, dict) else []
+    text = "\n".join(part.get("text", "") for part in parts if isinstance(part, dict)).strip()
     if not text:
         raise OCRServiceError("Gemini returned no readable text for this image.")
     return text, 0
