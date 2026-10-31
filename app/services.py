@@ -254,12 +254,21 @@ def rapid_ocr_remote(data):
         method="POST",
     )
     try:
-        with urlopen(request, timeout=25) as response:
+        with urlopen(request, timeout=45) as response:
             result = json.load(response)
     except HTTPError as exc:
-        raise OCRServiceError(f"RapidOCR service request failed ({exc.code}).") from exc
+        detail = exc.read().decode("utf-8", "replace").strip()
+        raise OCRServiceError(
+            f"RapidOCR service request failed ({exc.code}). {detail[:180]}"
+        ) from exc
     except (URLError, TimeoutError) as exc:
-        raise OCRServiceError("RapidOCR service could not be reached. Try again.") from exc
+        reason = getattr(exc, "reason", None)
+        detail = str(reason or exc).strip()
+        raise OCRServiceError(
+            "RapidOCR service could not be reached. "
+            "Check the Render URL, service status, and cold-start time. "
+            f"{detail[:120]}"
+        ) from exc
     text = result.get("extracted_text") if isinstance(result, dict) else None
     if not isinstance(text, str) or not text.strip():
         raise OCRServiceError("RapidOCR returned no readable text for this image.")
