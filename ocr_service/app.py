@@ -1,4 +1,5 @@
 import os
+import threading
 
 os.environ.setdefault("OMP_NUM_THREADS", "1")
 os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
@@ -6,11 +7,11 @@ os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
 import cv2
 import numpy as np
 from fastapi import FastAPI, File, Header, HTTPException, UploadFile
-from rapidocr_onnxruntime import RapidOCR
 
 app = FastAPI(title="PharmaCare RapidOCR service")
 cv2.setNumThreads(1)
-engine = RapidOCR()
+engine = None
+engine_lock = threading.Lock()
 TOKEN = os.getenv("RAPID_OCR_TOKEN", "").strip()
 MAX_IMAGE_DIMENSION = 1600
 
@@ -23,6 +24,16 @@ def health():
 @app.get("/")
 def root():
     return {"service": "pharmacare-rapidocr", "ok": True}
+
+
+def get_engine():
+    global engine
+    if engine is None:
+        with engine_lock:
+            if engine is None:
+                from rapidocr_onnxruntime import RapidOCR
+                engine = RapidOCR()
+    return engine
 
 
 @app.post("/ocr")
@@ -45,7 +56,7 @@ async def ocr(file: UploadFile = File(...), x_ocr_token: str = Header(default=""
             interpolation=cv2.INTER_AREA,
         )
     try:
-        result, _ = engine(image)
+        result, _ = get_engine()(image)
     except Exception as exc:
         raise HTTPException(502, "RapidOCR could not process this image") from exc
     result = result or []
