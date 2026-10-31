@@ -96,34 +96,46 @@ def gemini_ocr(data):
     model = os.getenv("GEMINI_MODEL", "gemini-3.8-flash").strip()
     if model.startswith("models/"):
         model = model[7:]
-    request = Request(
-        f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}",
-        data=body,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    for attempt in range(3):
-        try:
-            with urlopen(request, timeout=45) as response:
-                result = json.load(response)
-            break
-        except HTTPError as exc:
-            detail = exc.read().decode("utf-8", "replace")
+    models = [model]
+    fallback = os.getenv("GEMINI_FALLBACK_MODEL", "gemini-3.8-flash-lite").strip()
+    if fallback.startswith("models/"):
+        fallback = fallback[7:]
+    if fallback and fallback != model:
+        models.append(fallback)
+    result = None
+    for model_name in models:
+        request = Request(
+            f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={key}",
+            data=body,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        for attempt in range(3):
             try:
-                detail = json.loads(detail).get("error", {}).get("message", detail)
-            except json.JSONDecodeError:
-                pass
-            if exc.code in (429, 500, 502, 503, 504) and attempt < 2:
-                time.sleep(2 ** attempt)
-                continue
-            if exc.code == 503:
-                raise OCRServiceError("Gemini is temporarily busy. Please try OCR again in a minute.") from exc
-            raise OCRServiceError(f"Gemini OCR request failed ({exc.code}): {detail}") from exc
-        except (URLError, TimeoutError) as exc:
-            if attempt < 2:
-                time.sleep(2 ** attempt)
-                continue
-            raise OCRServiceError("Gemini OCR could not be reached. Try again.") from exc
+                with urlopen(request, timeout=45) as response:
+                    result = json.load(response)
+                break
+            except HTTPError as exc:
+                detail = exc.read().decode("utf-8", "replace")
+                try:
+                    detail = json.loads(detail).get("error", {}).get("message", detail)
+                except json.JSONDecodeError:
+                    pass
+                if exc.code in (429, 500, 502, 503, 504) and attempt < 2:
+                    time.sleep(2 ** attempt)
+                    continue
+                if exc.code == 503 and model_name != models[-1]:
+                    break
+                if exc.code == 503:
+                    raise OCRServiceError("Gemini is temporarily busy. Please try OCR again in a minute.") from exc
+                raise OCRServiceError(f"Gemini OCR request failed ({exc.code}): {detail}") from exc
+            except (URLError, TimeoutError) as exc:
+                if attempt < 2:
+                    time.sleep(2 ** attempt)
+                    continue
+                raise OCRServiceError("Gemini OCR could not be reached. Try again.") from exc
+        if result is not None:
+            break
     if result.get("error"):
         raise OCRServiceError(result["error"].get("message", "Gemini rejected the image."))
     candidates = result.get("candidates") or []
