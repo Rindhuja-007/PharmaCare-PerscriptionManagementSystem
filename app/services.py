@@ -93,7 +93,7 @@ def gemini_ocr(data):
             "responseMimeType": "text/plain",
         },
     }).encode("utf-8")
-    model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip()
+    model = os.getenv("GEMINI_MODEL", "gemini-3.8-flash").strip()
     if model.startswith("models/"):
         model = model[7:]
     request = Request(
