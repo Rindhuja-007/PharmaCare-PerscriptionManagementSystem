@@ -237,15 +237,6 @@ def rapid_ocr_remote(data):
     if not endpoint:
         raise OCRServiceError("RapidOCR service is not configured on this server.")
     token = os.getenv("RAPID_OCR_TOKEN", "").strip()
-    headers = {"X-OCR-Token": token} if token else {}
-    try:
-        with urlopen(Request(endpoint + "/health", headers=headers), timeout=10):
-            pass
-    except (HTTPError, URLError, TimeoutError) as exc:
-        raise OCRServiceError(
-            "RapidOCR service health check failed. "
-            "Confirm the Render service is running and RAPID_OCR_URL is correct."
-        ) from exc
     boundary = b"----PharmaCareOCRBoundary"
     body = (
         b"--" + boundary + b"\r\n"
@@ -263,7 +254,7 @@ def rapid_ocr_remote(data):
         method="POST",
     )
     try:
-        with urlopen(request, timeout=45) as response:
+        with urlopen(request, timeout=55) as response:
             result = json.load(response)
     except HTTPError as exc:
         detail = exc.read().decode("utf-8", "replace").strip()
@@ -275,7 +266,7 @@ def rapid_ocr_remote(data):
         detail = str(reason or exc).strip()
         raise OCRServiceError(
             "RapidOCR service could not be reached. "
-            "Check the Render URL, service status, and cold-start time. "
+            "Check the Render URL, service status, token, and cold-start time. "
             f"{detail[:120]}"
         ) from exc
     text = result.get("extracted_text") if isinstance(result, dict) else None
