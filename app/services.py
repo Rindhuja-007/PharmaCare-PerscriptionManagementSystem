@@ -342,7 +342,10 @@ def _catalogue_candidate(value, medicine_names):
         fuzz.WRatio(value.lower(), candidate.lower()),
         fuzz.token_set_ratio(value.lower(), candidate.lower()),
     )
-    if score >= 62:
+    value_tokens = set(re.findall(r"[a-z]{4,}", value.lower()))
+    candidate_tokens = set(re.findall(r"[a-z]{4,}", candidate.lower()))
+    shares_word = bool(value_tokens & candidate_tokens)
+    if score >= 62 or (score >= 50 and shares_word):
         return candidate
     return None
 def extract(text, medicine_names=None):

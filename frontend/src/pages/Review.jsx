@@ -73,8 +73,9 @@ export default function Review() {
   const runBrowserOcr = async () => {
     let worker
     try {
-      const {data: image} = await api.get(`/prescriptions/${id}/image?which=original`, {responseType: 'blob'})
+      const {data: image} = await api.get(`/prescriptions/${id}/image?which=${p.processed_image_path ? 'processed' : 'original'}`, {responseType: 'blob'})
       worker = await createWorker('eng')
+      await worker.setParameters({tessedit_pageseg_mode: '6', preserve_interword_spaces: '1'})
       const result = await worker.recognize(image)
       const text = result.data.text.trim()
       if (!text) throw new Error('No readable text was found in the image.')
