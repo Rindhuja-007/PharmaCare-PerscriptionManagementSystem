@@ -39,10 +39,12 @@ function Slip({item, d, set, m, meds, locked, problem}) {
     {problem && <div className="note err" style={{marginTop: 10}}>{problem}</div>}</div>
 }
 function AddModal({pid, meds, onClose, onAdded}) {
-  const toast = useToast(), [f, setF] = useState({medicine_id: '', quantity: '', dosage: '', frequency: '', duration: ''}), s = k => e => setF({...f, [k]: e.target.value})
+  const toast = useToast(), [f, setF] = useState({medicine_id: '', quantity: '', dosage: '', frequency: '', duration: ''}), [search, setSearch] = useState(''), s = k => e => setF({...f, [k]: e.target.value})
+  const filteredMeds = meds.filter(m => `${m.medicine_name} ${m.generic_name || ''}`.toLowerCase().includes(search.trim().toLowerCase()))
   const go = async e => { e.preventDefault(); const med = meds.find(x => x.id === +f.medicine_id)
+    if (!med) return toast('Choose a medicine from the catalogue.', 'err')
     try { await api.post(`/prescriptions/${pid}/items`, {extracted_medicine_name: med.medicine_name, medicine_id: med.id, quantity: +f.quantity || null, dosage: f.dosage || null, frequency: f.frequency || null, duration: f.duration || null}); toast('Medicine added'); onAdded() } catch (x) { toast(errText(x), 'err') } }
-  return <Modal title="Add a medicine" onClose={onClose}><form onSubmit={go} className="form"><Field label="Medicine" cls="full"><select required value={f.medicine_id} onChange={s('medicine_id')}><option value="">Select…</option>{meds.map(x => <option key={x.id} value={x.id}>{x.medicine_name} ({x.usable_stock} in stock)</option>)}</select></Field>
+  return <Modal title="Add a medicine from catalogue" onClose={onClose}><form onSubmit={go} className="form"><Field label="Search medicine" cls="full"><input autoFocus value={search} onChange={e => setSearch(e.target.value)} placeholder="Search brand or generic name…"/></Field><Field label="Medicine" cls="full"><select required value={f.medicine_id} onChange={s('medicine_id')}><option value="">Select…</option>{filteredMeds.map(x => <option key={x.id} value={x.id}>{x.medicine_name} ({x.usable_stock} in stock)</option>)}</select>{!filteredMeds.length && <div className="small muted" style={{marginTop: 6}}>No catalogue medicine matches that search.</div>}</Field>
     <Field label="Quantity"><input type="number" min="1" required value={f.quantity} onChange={s('quantity')}/></Field><Field label="Dosage"><input value={f.dosage} onChange={s('dosage')}/></Field><Field label="Frequency"><input value={f.frequency} onChange={s('frequency')} placeholder="1-0-1"/></Field><Field label="Duration"><input value={f.duration} onChange={s('duration')} placeholder="5 days"/></Field>
     <div className="foot full"><button type="button" className="btn" onClick={onClose}>Cancel</button><button className="btn primary">Add medicine</button></div></form></Modal>
 }
@@ -134,7 +136,7 @@ export default function Review() {
           {busy && <span className="muted small"><span className="spin"/> {busy}…</span>}</div>
           <p className="small muted" style={{margin: '10px 0 0'}}>These steps only suggest. Nothing is approved and no stock moves until you verify and dispense.</p></div>}
         <div className="ph" style={{margin: '4px 0 10px'}}><h2>Medicines on this prescription</h2>{!locked && <button className="btn sm" onClick={() => setAdding(true)}><Plus size={14}/>Add medicine</button>}</div>
-        {p.items.length === 0 ? <div className="panel"><Empty title="No medicines yet" hint="Run the automatic read above, or add the medicines yourself."/></div> :
+        {p.items.length === 0 ? <div className="panel"><Empty title="No medicines yet" hint="OCR is only a suggestion. Search the catalogue and add each medicine manually for reliable dispensing."/></div> :
           p.items.map(i => <Slip key={i.id} item={i} d={dec[i.id] || mkDec(i)} set={set(i.id)} m={match[i.id]} meds={meds} locked={locked} problem={probs[i.id]}/>)}
         {!locked && p.items.length > 0 && <div className="sticky-save"><span className="muted small">{cnt('VERIFIED')} to dispense, {cnt('REJECTED')} rejected, {cnt('PENDING')} undecided</span><button className="btn primary" disabled={!!busy} onClick={save}>Save verification</button></div>}
         {p.status === 'REJECTED' && <div className="note warn">Every line was rejected, so there is nothing to dispense. Change a decision and save again if this was a mistake.</div>}
