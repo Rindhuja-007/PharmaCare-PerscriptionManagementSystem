@@ -5,7 +5,7 @@
   "functions": {
     "api/index.py": {
       "maxDuration": 60,
-      "excludeFiles": "{frontend/**,tests/**,requirements-dev.txt,requirements-ocr.txt,*.db,**/__pycache__/**}"
+      "excludeFiles": "{frontend/**,tests/**,requirements-dev.txt,requirements-ocr.txt,*.db,**/__pycache__/**,**/cv2/**,**/numpy/**,**/numpy.libs/**,**/onnxruntime/**,**/rapidocr_onnxruntime/**,**/shapely/**,**/scipy/**,**/torch/**,**/tensorflow/**}"
     }
   }
 }
