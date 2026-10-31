@@ -23,13 +23,8 @@ The backend already converts `postgresql://` and `postgres://` URLs for SQLAlche
 Images live in the database (max 4 MB, the browser shrinks photos first). The Vercel deployment uses the lightweight image-processing dependencies and supports manual medicine entry. RapidOCR is optional for local deployments: install `requirements-ocr.txt` (included by `requirements-dev.txt`) to enable local OCR. If OCR is unavailable, the app says so and you can add medicines by hand.
 OCR filters out non-medicine prescription text and suggests each medicine with its dosage, frequency, duration, and explicitly stated quantity for pharmacist review.
 
-## Enable Gemini OCR through Google AI Studio
+## Browser OCR
 
-Gemini is called only by the backend, so the API key is never exposed in the browser.
+Prescription OCR runs in the user's browser with Tesseract.js. The image is not uploaded to an OCR vendor, and no OCR API key, billing account, Render service, or external OCR quota is required. The browser sends only the recognized text to the backend, where the existing catalogue matching and pharmacist verification workflow continues.
 
-1. Open [Google AI Studio](https://aistudio.google.com/), sign in, and select **Get API key**.
-2. Create or select a Google AI Studio project and copy the API key.
-3. In Vercel, open **Project -> Settings -> Environment Variables**, add `GEMINI_API_KEY`, and enable it for Production (and Preview if needed).
-4. Redeploy, open a prescription, click **Clean image**, then **Run OCR**, and finally **Find medicines**.
-
-The application uses Gemini Flash (`gemini-3.8-flash` by default) to transcribe handwritten text. Its response is treated only as a suggestion: catalogue matching, pharmacist verification, and dispensing remain separate steps. Do not put the key in `VITE_*` variables or frontend source code. AI Studio free-tier quotas and data-use terms are controlled by Google; check the current [Gemini API pricing](https://ai.google.dev/gemini-api/docs/pricing) before production use. Remove the old `GOOGLE_VISION_API_KEY` variable from Vercel after switching.
+Browser OCR is free and private, but handwritten medicine names may be misread. Always review the extracted lines, match them against the catalogue, and verify each line before dispensing. A clear, straight, well-lit image produces the best result.

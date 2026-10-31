@@ -68,6 +68,77 @@ def google_ocr(data):
     ]
     return text, (sum(confidences) / len(confidences) * 100 if confidences else 0)
 
+def qwen_ocr(data):
+    key = os.getenv("DASHSCOPE_API_KEY")
+    if not key:
+        raise OCRServiceError("Qwen OCR is not configured on this server.")
+    base_url = os.getenv(
+        "DASHSCOPE_BASE_URL",
+        "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+    ).rstrip("/")
+    model = os.getenv("QWEN_MODEL", "qwen-vl-ocr").strip()
+    body = json.dumps({
+        "model": model,
+        "messages": [{
+            "role": "user",
+            "content": [
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": "data:image/png;base64," + base64.b64encode(data).decode("ascii"),
+                    },
+                },
+                {
+                    "type": "text",
+                    "text": (
+                        "Transcribe this prescription exactly. Return only visible text, "
+                        "one line per prescription line. Preserve medicine names, dosage, "
+                        "frequency, duration, and quantity. Do not invent or explain."
+                    ),
+                },
+            ],
+        }],
+        "temperature": 0,
+    }).encode("utf-8")
+    request = Request(
+        base_url + "/chat/completions",
+        data=body,
+        headers={
+            "Authorization": "Bearer " + key,
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=15) as response:
+            result = json.load(response)
+    except HTTPError as exc:
+        detail = exc.read().decode("utf-8", "replace")
+        try:
+            detail = json.loads(detail).get("error", {}).get("message", detail)
+        except json.JSONDecodeError:
+            pass
+        raise OCRServiceError(f"Qwen OCR request failed ({exc.code}): {detail}") from exc
+    except (URLError, TimeoutError) as exc:
+        raise OCRServiceError("Qwen OCR could not be reached. Try again.") from exc
+    if not isinstance(result, dict):
+        raise OCRServiceError("Qwen returned an invalid response.")
+    if result.get("error"):
+        error = result["error"]
+        raise OCRServiceError(error.get("message", "Qwen rejected the image."))
+    choices = result.get("choices") or []
+    message = choices[0].get("message") if choices and isinstance(choices[0], dict) else None
+    content = message.get("content") if isinstance(message, dict) else None
+    if isinstance(content, list):
+        text = "\n".join(
+            part.get("text", "") for part in content if isinstance(part, dict)
+        ).strip()
+    else:
+        text = str(content or "").strip()
+    if not text:
+        raise OCRServiceError("Qwen returned no readable text for this image.")
+    return text, 0
+
 def gemini_ocr(data):
     key = os.getenv("GEMINI_API_KEY")
     if not key:
@@ -122,6 +193,10 @@ def gemini_ocr(data):
                     detail = json.loads(detail).get("error", {}).get("message", detail)
                 except json.JSONDecodeError:
                     pass
+                if exc.code == 429:
+                    raise OCRServiceError(
+                        "Gemini daily quota is exhausted. Try again after the reset time or enable billing."
+                    ) from exc
                 if exc.code in (429, 500, 502, 503, 504) and attempt + 1 < attempts:
                     time.sleep(2 ** attempt)
                     continue
@@ -158,6 +233,8 @@ def gemini_ocr(data):
     return text, 0
 
 def ocr(data):
+    if os.getenv("DASHSCOPE_API_KEY"):
+        return qwen_ocr(data)
     if os.getenv("GEMINI_API_KEY"):
         return gemini_ocr(data)
     if os.getenv("GOOGLE_VISION_API_KEY"):

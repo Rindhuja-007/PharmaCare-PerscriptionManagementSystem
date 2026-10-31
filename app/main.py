@@ -200,6 +200,16 @@ def rx_ocr(pid: int, db=D, u=U):
     p.extracted_text, p.confidence_score = txt, round(conf, 2)
     if p.status == "UPLOADED": p.status = "PROCESSED"
     db.commit(); return {"extracted_text": txt, "confidence_score": p.confidence_score}  # never approves, never touches stock
+class OCRText(BaseModel):
+    extracted_text: str = Field(min_length=1, max_length=100_000)
+    confidence_score: Optional[float] = Field(default=0, ge=0, le=100)
+@app.post("/prescriptions/{pid}/process-text")
+def rx_text(pid: int, b: OCRText, db=D, u=U):
+    p = rx(db, pid)
+    p.extracted_text = b.extracted_text.strip()
+    p.confidence_score = round(b.confidence_score or 0, 2)
+    if p.status == "UPLOADED": p.status = "PROCESSED"
+    db.commit(); return {"extracted_text": p.extracted_text, "confidence_score": p.confidence_score}
 @app.post("/prescriptions/{pid}/extract")
 def rx_extract(pid: int, db=D, u=U):
     p = rx(db, pid)
