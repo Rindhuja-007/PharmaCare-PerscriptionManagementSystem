@@ -93,7 +93,9 @@ def gemini_ocr(data):
             "responseMimeType": "text/plain",
         },
     }).encode("utf-8")
-    model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip()
+    if model.startswith("models/"):
+        model = model[7:]
     request = Request(
         f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}",
         data=body,
@@ -104,7 +106,12 @@ def gemini_ocr(data):
         with urlopen(request, timeout=45) as response:
             result = json.load(response)
     except HTTPError as exc:
-        raise OCRServiceError(f"Gemini OCR request failed ({exc.code}).") from exc
+        detail = exc.read().decode("utf-8", "replace")
+        try:
+            detail = json.loads(detail).get("error", {}).get("message", detail)
+        except json.JSONDecodeError:
+            pass
+        raise OCRServiceError(f"Gemini OCR request failed ({exc.code}): {detail}") from exc
     except (URLError, TimeoutError) as exc:
         raise OCRServiceError("Gemini OCR could not be reached. Try again.") from exc
     if result.get("error"):
