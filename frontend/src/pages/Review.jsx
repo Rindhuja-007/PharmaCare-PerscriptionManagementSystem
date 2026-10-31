@@ -74,7 +74,7 @@ export default function Review() {
     setBusy('Reading text in browser')
     let worker
     try {
-      const {data: image} = await api.get(`/prescriptions/${id}/image?which=${p.processed_image_path ? 'processed' : 'original'}`, {responseType: 'blob'})
+      const {data: image} = await api.get(`/prescriptions/${id}/image?which=original`, {responseType: 'blob'})
       worker = await createWorker('eng')
       const result = await worker.recognize(image)
       const text = result.data.text.trim()

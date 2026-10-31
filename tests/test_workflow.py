@@ -8,6 +8,9 @@ def test_extract_returns_only_medicine_lines():
 def test_extract_uses_catalogue_to_recover_ocr_medicine_names():
     text = "Qukpin9omy\nSizodon Plus\nPatient Age 45 yrs"
     assert [item["name"] for item in S.extract(text, ["Qutipin", "Sizodon Plus"])] == ["Qutipin", "Sizodon Plus"]
+def test_extract_uses_catalogue_for_noisy_handwritten_lines_with_dosage():
+    text = "Tab Qukpin 200mg\nTab S' Zodon Plus\nTab Rivobil 0.5 mg"
+    assert [item["name"] for item in S.extract(text)] == ["Qukpin", "Sizodon Plus", "Rivobil"]
 def test_extract_reads_schedule_on_following_line_and_calculates_course_quantity():
     items = S.extract("Tab Qutipin 20mg\n1-0-1 x 5 days")
     assert items[0]["frequency"] == "1-0-1"

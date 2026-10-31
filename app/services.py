@@ -281,6 +281,26 @@ RE_QTY = re.compile(
 def _fix_key(value):
     value = re.sub(r"^\d+[.)]\s*", "", value.strip().lower())
     return re.sub(r"\s+", " ", value)
+def _catalogue_candidate(value, medicine_names):
+    value = re.sub(r"^\s*(?:\d{1,2}[.)]\s*)?", "", value)
+    value = re.sub(r"\b(?:tab(?:let)?|cap(?:sule)?|inj(?:ection)?|syp|syrup|drops?|oint(?:ment)?)\b", " ", value, flags=re.I)
+    value = re.sub(r"\s+", " ", value).strip()
+    if not value or len(value) > 100:
+        return None
+    candidate = max(
+        medicine_names,
+        key=lambda name: max(
+            fuzz.WRatio(value.lower(), name.lower()),
+            fuzz.token_set_ratio(value.lower(), name.lower()),
+        ),
+    )
+    score = max(
+        fuzz.WRatio(value.lower(), candidate.lower()),
+        fuzz.token_set_ratio(value.lower(), candidate.lower()),
+    )
+    if score >= 62:
+        return candidate
+    return None
 def extract(text, medicine_names=None):
     out, pending = [], None
     medicine_names = medicine_names or []
@@ -304,13 +324,12 @@ def extract(text, medicine_names=None):
         m = RE_FORM.match(ln)
         catalogue_name = None
         normalized = FIXES.get(_fix_key(ln))
-        if not ui_capture and not m and not normalized and medicine_names and len(ln) <= 100:
-            candidate = max(medicine_names, key=lambda n: fuzz.WRatio(ln.lower(), n.lower()))
-            if fuzz.WRatio(ln.lower(), candidate.lower()) >= 72:
-                catalogue_name = candidate
+        if not ui_capture and not m and not normalized and medicine_names:
+            catalogue_name = _catalogue_candidate(ln, medicine_names)
         if RE_BLOCK.search(ln) and not m and not RE_MED_HINT.search(ln) and not catalogue_name and ln.lower() not in FIXES: continue
         if m:
-            body = m.group(2).strip()
+            raw_body = m.group(2).strip()
+            body = catalogue_name or raw_body
         elif catalogue_name:
             body = catalogue_name
         elif RE_MED_HINT.search(ln):
@@ -319,7 +338,8 @@ def extract(text, medicine_names=None):
             if not normalized: continue
             body = normalized
         body = FIXES.get(_fix_key(body), body)
-        s, f, d, q = RE_STR.search(body), RE_FREQ.search(body), RE_DUR.search(body), RE_QTY.search(body)
+        details = raw_body if m and catalogue_name else body
+        s, f, d, q = RE_STR.search(details), RE_FREQ.search(details), RE_DUR.search(details), RE_QTY.search(details)
         name = re.sub(
             r"(?:\s+|^)[x×]\s*$",
             "",
