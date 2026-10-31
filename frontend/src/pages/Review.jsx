@@ -1,6 +1,7 @@
 import {useCallback,useEffect,useMemo,useState} from 'react'
 import {Link,useParams} from 'react-router-dom'
 import {ArrowLeft,CheckCircle2,Circle,Plus,Wand2,ZoomIn,AlertTriangle} from 'lucide-react'
+import {createWorker} from 'tesseract.js'
 import {api,errText} from '../api'
 import {Badge,Confirm,Empty,Field,Modal,PageHead,RX_LABEL,RX_TONE,fmtDate,money,useToast} from '../ui'
 import ReceiptModal from './Receipt'
@@ -68,11 +69,42 @@ export default function Review() {
   const load = useCallback(async () => { try { const {data} = await api.get('/prescriptions/' + id); setP(data); setDec(prev => Object.fromEntries(data.items.map(i => [i.id, prev[i.id] || mkDec(i)]))) } catch (e) { setErr(errText(e)) } }, [id])
   const loadMeds = useCallback(() => api.get('/medicines').then(r => setMeds(r.data)).catch(() => {}), [])
   useEffect(() => { load(); loadMeds() }, [load, loadMeds])
-  const run = async (path, label) => { setBusy(label); try { const r = await api.post(`/prescriptions/${id}/${path}`); await load(); return r.data } catch (e) { toast(errText(e), 'err'); throw e } finally { setBusy('') } }
+  const run = async (path, label, notify = true) => { setBusy(label); try { const r = await api.post(`/prescriptions/${id}/${path}`); await load(); return r.data } catch (e) { if (notify) toast(errText(e), 'err'); throw e } finally { setBusy('') } }
+  const runBrowserOcr = async () => {
+    let worker
+    try {
+      const {data: image} = await api.get(`/prescriptions/${id}/image?which=original`, {responseType: 'blob'})
+      worker = await createWorker('eng')
+      const result = await worker.recognize(image)
+      const text = result.data.text.trim()
+      if (!text) throw new Error('No readable text was found in the image.')
+      await api.post(`/prescriptions/${id}/process-text`, {extracted_text: text, confidence_score: result.data.confidence || 0})
+      await load()
+      return text
+    } finally {
+      if (worker) await worker.terminate()
+    }
+  }
+  const runOcrWithFallback = async () => {
+    try {
+      return await run('process', 'Reading with RapidOCR', false)
+    } catch {
+      toast('RapidOCR is unavailable. Reading in the browser instead.', 'warn')
+      setBusy('Reading in browser')
+      try {
+        return await runBrowserOcr()
+      } catch (e) {
+        toast(e?.response ? errText(e) : (e?.message || 'Browser OCR failed. Try a clearer image.'), 'err')
+        throw e
+      } finally {
+        setBusy('')
+      }
+    }
+  }
   const doMatch = async () => { const d = await run('match', 'Matching catalogue'); setMatch(Object.fromEntries(d.map(x => [x.item_id, x])))
     setDec(prev => { const n = {...prev}; d.forEach(x => { const c = x.candidates[0]; if (c && c.score >= 90 && n[x.item_id] && !n[x.item_id].medicine_id) n[x.item_id] = {...n[x.item_id], medicine_id: c.medicine_id} }); return n }) }
   const findAndMatch = async () => { try { const it = await run('extract', 'Finding medicines'); if (it.length) await doMatch(); else toast('No medicine lines were found. Add them manually.', 'warn') } catch { /* toast shown */ } }
-  const runAll = async () => { try { await run('preprocess', 'Cleaning image'); await run('process', 'Reading prescription'); await findAndMatch() } catch { /* toast shown */ } }
+  const runAll = async () => { try { await run('preprocess', 'Cleaning image'); await runOcrWithFallback(); await findAndMatch() } catch { /* toast shown */ } }
   const set = iid => patch => setDec(d => ({...d, [iid]: {...d[iid], ...patch}}))
   const save = async () => {
     const bad = {}; p.items.forEach(i => { const d = dec[i.id]; if (d.status === 'PENDING') bad[i.id] = 'Choose Verify or Reject for this line.'; else if (d.status === 'VERIFIED') { if (!d.medicine_id) bad[i.id] = 'Select the catalogue medicine to dispense.'; else if (!(+d.quantity > 0)) bad[i.id] = 'Enter a quantity greater than zero.' } })
@@ -96,7 +128,7 @@ export default function Review() {
       </aside>
       <section>
         {!locked && <div className="panel"><div className="actions"><button className="btn primary" disabled={!!busy} onClick={() => runAll()}><Wand2 size={16}/>Read prescription automatically</button>
-          <button className="btn sm" disabled={!!busy} onClick={() => run('preprocess', 'Cleaning image').catch(() => {})}>Clean image</button><button className="btn sm" disabled={!!busy} onClick={() => run('process', 'Reading prescription').catch(() => {})}>Run OCR</button>
+          <button className="btn sm" disabled={!!busy} onClick={() => run('preprocess', 'Cleaning image').catch(() => {})}>Clean image</button><button className="btn sm" disabled={!!busy} onClick={() => runOcrWithFallback().catch(() => {})}>Run OCR</button>
           <button className="btn sm" disabled={!!busy} onClick={findAndMatch}>Find medicines</button><button className="btn sm" disabled={!!busy || !p.items.length} onClick={() => doMatch().catch(() => {})}>Match catalogue</button>
           {busy && <span className="muted small"><span className="spin"/> {busy}…</span>}</div>
           <p className="small muted" style={{margin: '10px 0 0'}}>These steps only suggest. Nothing is approved and no stock moves until you verify and dispense.</p></div>}

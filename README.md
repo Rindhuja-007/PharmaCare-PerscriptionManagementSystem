@@ -37,3 +37,5 @@ The Vercel application can use RapidOCR through a separate Render web service. T
 6. Redeploy Vercel, then open a prescription and click **Read prescription automatically**.
 
 The Vercel backend sends the prescription image to the authenticated Render service. RapidOCR returns text and confidence; the existing extraction, catalogue matching, pharmacist verification, and dispensing workflow remains unchanged. Render's free service may sleep when idle, so the first OCR request can take longer.
+
+If RapidOCR is unavailable or times out, the frontend automatically falls back to Tesseract.js in the browser. The browser fallback keeps the application usable without paid Render resources; only the recognized text is sent to Vercel. The first fallback use downloads the English OCR model and may take longer.
