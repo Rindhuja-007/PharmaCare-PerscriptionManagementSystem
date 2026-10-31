@@ -2,5 +2,10 @@
   "buildCommand": "cd frontend && npm install && npm run build",
   "outputDirectory": "frontend/dist",
   "rewrites": [{ "source": "/api/(.*)", "destination": "/api/index" }],
-  "functions": { "api/index.py": { "maxDuration": 60, "excludeFiles": "{frontend/**,tests/**}" } }
+  "functions": {
+    "api/index.py": {
+      "maxDuration": 60,
+      "excludeFiles": "{frontend/**,tests/**,requirements-dev.txt,requirements-ocr.txt,*.db,**/__pycache__/**}"
+    }
+  }
 }
