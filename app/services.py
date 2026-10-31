@@ -1,4 +1,4 @@
-import base64, io, json, os, re
+import base64, io, json, os, re, time
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from PIL import Image, ImageOps
@@ -102,18 +102,28 @@ def gemini_ocr(data):
         headers={"Content-Type": "application/json"},
         method="POST",
     )
-    try:
-        with urlopen(request, timeout=45) as response:
-            result = json.load(response)
-    except HTTPError as exc:
-        detail = exc.read().decode("utf-8", "replace")
+    for attempt in range(3):
         try:
-            detail = json.loads(detail).get("error", {}).get("message", detail)
-        except json.JSONDecodeError:
-            pass
-        raise OCRServiceError(f"Gemini OCR request failed ({exc.code}): {detail}") from exc
-    except (URLError, TimeoutError) as exc:
-        raise OCRServiceError("Gemini OCR could not be reached. Try again.") from exc
+            with urlopen(request, timeout=45) as response:
+                result = json.load(response)
+            break
+        except HTTPError as exc:
+            detail = exc.read().decode("utf-8", "replace")
+            try:
+                detail = json.loads(detail).get("error", {}).get("message", detail)
+            except json.JSONDecodeError:
+                pass
+            if exc.code in (429, 500, 502, 503, 504) and attempt < 2:
+                time.sleep(2 ** attempt)
+                continue
+            if exc.code == 503:
+                raise OCRServiceError("Gemini is temporarily busy. Please try OCR again in a minute.") from exc
+            raise OCRServiceError(f"Gemini OCR request failed ({exc.code}): {detail}") from exc
+        except (URLError, TimeoutError) as exc:
+            if attempt < 2:
+                time.sleep(2 ** attempt)
+                continue
+            raise OCRServiceError("Gemini OCR could not be reached. Try again.") from exc
     if result.get("error"):
         raise OCRServiceError(result["error"].get("message", "Gemini rejected the image."))
     candidates = result.get("candidates") or []
